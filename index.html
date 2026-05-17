@@ -1,0 +1,355 @@
+<!DOCTYPE html><html lang="ca"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MenjaEspanya 🏴󠁥󠁳󠁣󠁴󠁿</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#111; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:monospace; color:#fff; }
+#ui { display:flex; gap:2rem; padding:0.5rem 1rem; font-size:1.2rem; }
+canvas { border:2px solid #9B1414; display:block; max-width:100vw; }
+#controls { display:grid; grid-template-columns:repeat(3,60px); grid-template-rows:repeat(2,60px); gap:4px; margin-top:12px; }
+#controls button { background:#333; border:1px solid #555; color:#fff; font-size:1.5rem; border-radius:8px; cursor:pointer; touch-action:manipulation; }
+#controls button:active { background:#555; }
+.btn-up { grid-column:2; grid-row:1; }
+.btn-left { grid-column:1; grid-row:2; }
+.btn-down { grid-column:2; grid-row:2; }
+.btn-right { grid-column:3; grid-row:2; }
+#overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; }
+#overlay h1 { font-size:2.5rem; color:#FCDD09; }
+#overlay p { color:#aaa; text-align:center; max-width:320px; }
+#overlay button { padding:0.8rem 2rem; background:#9B1414; color:#fff; border:none; border-radius:8px; font-size:1.2rem; cursor:pointer; }
+#overlay button:hover { background:#c01a1a; }
+</style>
+</head>
+<body>
+<div id="ui">
+  <span>⭐ Punts: <b id="score">0</b></span>
+  <span>❤️ Vides: <b id="lives">3</b></span>
+  <span>🏴󠁥󠁳󠁣󠁴󠁿 Nivell: <b id="level">1</b></span>
+</div>
+<canvas id="c"></canvas>
+<div id="controls">
+  <button class="btn-up" id="bu">▲</button>
+  <button class="btn-left" id="bl">◀</button>
+  <button class="btn-down" id="bd">▼</button>
+  <button class="btn-right" id="br">▶</button>
+</div>
+<div id="overlay">
+  <h1>🏴󠁥󠁳󠁣󠁴󠁿 MenjaEspanya</h1>
+  <p>Menja totes les banderes espanyoles!<br>Evita els fantasmes rojos.<br>Menja l'estelada gran per guanyar poder!</p>
+  <button id="startBtn">JUGAR</button>
+</div>
+<script>
+const MAZE_TEMPLATE = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+  [1,2,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,2,1],
+  [1,0,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,0,1],
+  [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+  [1,1,1,1,0,1,1,1,3,3,3,3,3,1,1,1,0,1,1,1,1],
+  [1,1,1,1,0,1,3,3,3,3,3,3,3,3,3,1,0,1,1,1,1],
+  [1,1,1,1,0,3,3,1,1,3,3,3,1,1,3,3,0,1,1,1,1],
+  [3,3,3,3,0,3,3,1,3,3,3,3,3,1,3,3,0,3,3,3,3],
+  [1,1,1,1,0,3,3,1,1,1,1,1,1,1,3,3,0,1,1,1,1],
+  [1,1,1,1,0,1,3,3,3,3,3,3,3,3,3,1,0,1,1,1,1],
+  [1,1,1,1,0,1,3,3,3,3,3,3,3,3,3,1,0,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,0,1],
+  [1,2,0,1,0,0,0,0,0,0,3,0,0,0,0,0,0,1,0,2,1],
+  [1,1,0,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,0,1,1],
+  [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+  [1,0,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+const CELL = 28;
+const COLS = 21, ROWS = 21;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+canvas.width = COLS * CELL;
+canvas.height = ROWS * CELL;
+
+let maze, player, ghosts, score, lives, level, gameState, animFrame;
+
+function initLevel() {
+  maze = MAZE_TEMPLATE.map(r => [...r]);
+  player = { x:10, y:16, dir:{x:0,y:0}, next:{x:0,y:0}, px:10*CELL+CELL/2, py:16*CELL+CELL/2, mouthAngle:0, mouthDir:1, powered:false, powerTimer:0 };
+  ghosts = [
+    { x:9,y:9, px:9*CELL+CELL/2, py:9*CELL+CELL/2, dir:{x:1,y:0}, color:'#FF0000', scared:false, eaten:false },
+    { x:10,y:9, px:10*CELL+CELL/2, py:9*CELL+CELL/2, dir:{x:-1,y:0}, color:'#FF6600', scared:false, eaten:false },
+    { x:11,y:9, px:11*CELL+CELL/2, py:11*CELL+CELL/2, dir:{x:0,y:1}, color:'#FF3366', scared:false, eaten:false },
+    { x:9,y:10, px:9*CELL+CELL/2, py:10*CELL+CELL/2, dir:{x:0,y:-1}, color:'#CC0000', scared:false, eaten:false },
+  ];
+}
+
+const SPEED = 2;
+
+function canMove(px, py, dx, dy) {
+  const half = CELL/2 - 2;
+  const nx = px + dx * SPEED;
+  const ny = py + dy * SPEED;
+  const corners = [
+    [nx - half, ny - half], [nx + half, ny - half],
+    [nx - half, ny + half], [nx + half, ny + half],
+  ];
+  return corners.every(([cx,cy]) => {
+    const col = Math.floor(cx / CELL);
+    const row = Math.floor(cy / CELL);
+    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true;
+    return maze[row][col] !== 1;
+  });
+}
+
+function wrapX(px) {
+  if (px < -CELL/2) return canvas.width + CELL/2;
+  if (px > canvas.width + CELL/2) return -CELL/2;
+  return px;
+}
+
+function movePlayer() {
+  const p = player;
+  const {x:nx, y:ny} = p.next;
+  if ((nx !== 0 || ny !== 0) && canMove(p.px, p.py, nx, ny)) {
+    p.dir = {x:nx, y:ny};
+  }
+  if ((p.dir.x !== 0 || p.dir.y !== 0) && canMove(p.px, p.py, p.dir.x, p.dir.y)) {
+    p.px += p.dir.x * SPEED;
+    p.py += p.dir.y * SPEED;
+    p.px = wrapX(p.px);
+  }
+  p.x = Math.round(p.px / CELL);
+  p.y = Math.round(p.py / CELL);
+  const col = Math.floor(p.px / CELL);
+  const row = Math.floor(p.py / CELL);
+  if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+    if (maze[row][col] === 0) { maze[row][col] = 3; score += 10; document.getElementById('score').textContent = score; }
+    if (maze[row][col] === 2) {
+      maze[row][col] = 3; score += 50; document.getElementById('score').textContent = score;
+      p.powered = true; p.powerTimer = 300;
+      ghosts.forEach(g => { g.scared = true; g.eaten = false; });
+    }
+  }
+  if (p.powered) { p.powerTimer--; if (p.powerTimer <= 0) { p.powered = false; ghosts.forEach(g => g.scared = false); } }
+  p.mouthAngle += 0.15 * p.mouthDir;
+  if (p.mouthAngle > 0.35 || p.mouthAngle < 0) p.mouthDir *= -1;
+}
+
+function ghostAI(g) {
+  const spd = g.scared ? SPEED * 0.5 : SPEED * (1 + (level-1)*0.1);
+  const cx = Math.floor(g.px / CELL);
+  const cy = Math.floor(g.py / CELL);
+  const onGrid = Math.abs(g.px - cx*CELL - CELL/2) < spd+1 && Math.abs(g.py - cy*CELL - CELL/2) < spd+1;
+  if (onGrid) {
+    const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+    const valid = dirs.filter(d => {
+      if (d.x === -g.dir.x && d.y === -g.dir.y) return false;
+      const nc = cx + d.x, nr = cy + d.y;
+      if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) return true;
+      return maze[nr][nc] !== 1;
+    });
+    if (valid.length > 0) {
+      let chosen;
+      if (Math.random() < 0.6 && !g.scared) {
+        chosen = valid.reduce((best, d) => {
+          const nc = cx+d.x, nr = cy+d.y;
+          const dist = (nc-player.x)**2 + (nr-player.y)**2;
+          return dist < best.dist ? {d, dist} : best;
+        }, {d:valid[0], dist:Infinity}).d;
+      } else if (g.scared) {
+        chosen = valid.reduce((best, d) => {
+          const nc = cx+d.x, nr = cy+d.y;
+          const dist = (nc-player.x)**2 + (nr-player.y)**2;
+          return dist > best.dist ? {d, dist} : best;
+        }, {d:valid[0], dist:-1}).d;
+      } else {
+        chosen = valid[Math.floor(Math.random()*valid.length)];
+      }
+      g.dir = chosen;
+    }
+  }
+  g.px += g.dir.x * spd;
+  g.py += g.dir.y * spd;
+  g.px = wrapX(g.px);
+}
+
+function checkCollisions() {
+  ghosts.forEach(g => {
+    const dx = g.px - player.px, dy = g.py - player.py;
+    if (Math.sqrt(dx*dx+dy*dy) < CELL*0.8) {
+      if (player.powered && !g.eaten) {
+        g.eaten = true; g.scared = false; score += 200;
+        document.getElementById('score').textContent = score;
+        setTimeout(() => { g.px = 10*CELL+CELL/2; g.py = 9*CELL+CELL/2; g.eaten = false; }, 3000);
+      } else if (!g.eaten) {
+        gameState = 'dead';
+      }
+    }
+  });
+}
+
+function checkWin() {
+  const hasFlags = maze.some(r => r.some(c => c === 0 || c === 2));
+  if (!hasFlags) { level++; document.getElementById('level').textContent = level; initLevel(); }
+}
+
+function drawMaze() {
+  maze.forEach((row, r) => {
+    row.forEach((cell, c) => {
+      const x = c*CELL, y = r*CELL;
+      if (cell === 1) {
+        ctx.fillStyle = '#8B0000';
+        ctx.fillRect(x, y, CELL, CELL);
+        ctx.fillStyle = '#FCDD09';
+        ctx.fillRect(x+2, y+2, CELL-4, CELL-4);
+        ctx.fillStyle = '#8B0000';
+        ctx.fillRect(x+5, y+5, CELL-10, CELL-10);
+      } else if (cell === 0) {
+        const bw = 14, bh = 10;
+        const bx = x + CELL/2 - bw/2, by = r*CELL + CELL/2 - bh/2;
+        ctx.fillStyle = '#AA151B'; ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#F1BF00'; ctx.fillRect(bx, by+bh*0.25, bw, bh*0.5);
+      } else if (cell === 2) {
+        const cx2 = x+CELL/2, cy2 = y+CELL/2, r2 = CELL*0.35;
+        ctx.fillStyle = '#0032A0';
+        ctx.beginPath();
+        ctx.moveTo(cx2-r2, cy2-r2); ctx.lineTo(cx2-r2, cy2+r2); ctx.lineTo(cx2+r2*0.3, cy2);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff';
+        drawStar(ctx, cx2+r2*0.05, cy2, r2*0.3, r2*0.15, 5);
+      }
+    });
+  });
+}
+
+function drawStar(ctx, x, y, outer, inner, points) {
+  ctx.beginPath();
+  for (let i=0; i<points*2; i++) {
+    const r2 = i%2===0 ? outer : inner;
+    const a = (i*Math.PI/points) - Math.PI/2;
+    i===0 ? ctx.moveTo(x+Math.cos(a)*r2, y+Math.sin(a)*r2) : ctx.lineTo(x+Math.cos(a)*r2, y+Math.sin(a)*r2);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+function drawPlayer() {
+  const p = player;
+  let baseAngle = 0;
+  if (p.dir.x === 1) baseAngle = 0;
+  else if (p.dir.x === -1) baseAngle = Math.PI;
+  else if (p.dir.y === 1) baseAngle = Math.PI/2;
+  else if (p.dir.y === -1) baseAngle = -Math.PI/2;
+  const mouth = p.mouthAngle;
+  const r = CELL/2 - 2;
+  ctx.fillStyle = '#FCDD09';
+  ctx.beginPath();
+  ctx.moveTo(p.px, p.py);
+  ctx.arc(p.px, p.py, r, baseAngle+mouth, baseAngle+2*Math.PI-mouth);
+  ctx.closePath(); ctx.fill();
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(p.px, p.py);
+  ctx.arc(p.px, p.py, r, baseAngle+mouth, baseAngle+2*Math.PI-mouth);
+  ctx.closePath();
+  ctx.clip();
+  ctx.fillStyle = '#9B1414';
+  ctx.fillRect(p.px-r, p.py-r/3, r*2, r*2/3);
+  ctx.restore();
+  const eyeX = p.px + Math.cos(baseAngle - Math.PI/4)*r*0.5;
+  const eyeY = p.py + Math.sin(baseAngle - Math.PI/4)*r*0.5;
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(eyeX, eyeY, 3, 0, Math.PI*2); ctx.fill();
+}
+
+function drawGhost(g) {
+  if (g.eaten) return;
+  const x = g.px, y = g.py, r2 = CELL/2-2;
+  ctx.fillStyle = g.scared ? '#0000CC' : g.color;
+  ctx.beginPath();
+  ctx.arc(x, y, r2, Math.PI, 0);
+  ctx.lineTo(x+r2, y+r2);
+  for (let i=3; i>=0; i--) {
+    const sx = x - r2 + (i+0.5)*(r2*2/4);
+    ctx.quadraticCurveTo(sx + r2/8, y+r2*(i%2===0?0.6:1), sx, y+r2*(i%2===0?1:0.6));
+  }
+  ctx.lineTo(x-r2, y);
+  ctx.closePath(); ctx.fill();
+  if (!g.scared) {
+    [[x-r2*0.35, y-r2*0.2],[x+r2*0.35, y-r2*0.2]].forEach(([ex,ey]) => {
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.ellipse(ex,ey,4,5,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#00f'; ctx.beginPath(); ctx.arc(ex+g.dir.x*2,ey+g.dir.y*2,2,0,Math.PI*2); ctx.fill();
+    });
+  } else {
+    ctx.fillStyle='#fff'; ctx.font='10px monospace'; ctx.textAlign='center';
+    ctx.fillText('👻', x, y+4);
+  }
+}
+
+function draw() {
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  drawMaze();
+  drawPlayer();
+  ghosts.forEach(drawGhost);
+}
+
+function gameLoop() {
+  if (gameState === 'playing') {
+    movePlayer();
+    ghosts.forEach(ghostAI);
+    checkCollisions();
+    if (gameState === 'dead') {
+      lives--;
+      document.getElementById('lives').textContent = lives;
+      if (lives <= 0) {
+        gameState = 'gameover';
+        showOverlay('GAME OVER', 'Puntuació final: ' + score, 'TORNAR A JUGAR');
+      } else {
+        gameState = 'playing';
+        player.px = 10*CELL+CELL/2; player.py = 16*CELL+CELL/2;
+        player.dir = {x:0,y:0}; player.next = {x:0,y:0};
+      }
+    }
+    checkWin();
+  }
+  draw();
+  animFrame = requestAnimationFrame(gameLoop);
+}
+
+function showOverlay(title, msg, btn) {
+  const ov = document.getElementById('overlay');
+  ov.querySelector('h1').textContent = title;
+  ov.querySelector('p').textContent = msg;
+  ov.querySelector('button').textContent = btn;
+  ov.style.display = 'flex';
+}
+
+function startGame() {
+  score = 0; lives = 3; level = 1;
+  document.getElementById('score').textContent = 0;
+  document.getElementById('lives').textContent = 3;
+  document.getElementById('level').textContent = 1;
+  initLevel();
+  gameState = 'playing';
+  document.getElementById('overlay').style.display = 'none';
+  if (animFrame) cancelAnimationFrame(animFrame);
+  gameLoop();
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('startBtn').textContent = 'TORNAR A JUGAR';
+  startGame();
+});
+
+document.addEventListener('keydown', e => {
+  const map = { ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}, ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0},
+                w:{x:0,y:-1}, s:{x:0,y:1}, a:{x:-1,y:0}, d:{x:1,y:0} };
+  if (map[e.key]) { e.preventDefault(); if (player) player.next = map[e.key]; }
+});
+
+document.getElementById('bu').addEventListener('click', () => { if (player) player.next = {x:0,y:-1}; });
+document.getElementById('bd').addEventListener('click', () => { if (player) player.next = {x:0,y:1}; });
+document.getElementById('bl').addEventListener('click', () => { if (player) player.next = {x:-1,y:0}; });
+document.getElementById('br').addEventListener('click', () => { if (player) player.next = {x:1,y:0}; });
+</script>
+</body>
+</html>
