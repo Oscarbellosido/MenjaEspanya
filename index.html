@@ -239,25 +239,56 @@ function drawPlayer() {
   else if (p.dir.x === -1) baseAngle = Math.PI;
   else if (p.dir.y === 1) baseAngle = Math.PI/2;
   else if (p.dir.y === -1) baseAngle = -Math.PI/2;
+
   const mouth = p.mouthAngle;
   const r = CELL/2 - 2;
-  ctx.fillStyle = '#FCDD09';
-  ctx.beginPath();
-  ctx.moveTo(p.px, p.py);
-  ctx.arc(p.px, p.py, r, baseAngle+mouth, baseAngle+2*Math.PI-mouth);
-  ctx.closePath(); ctx.fill();
+  const cx = p.px, cy = p.py;
+
   ctx.save();
+  // Retalla en forma de Comecocos (cercle amb boca)
   ctx.beginPath();
-  ctx.moveTo(p.px, p.py);
-  ctx.arc(p.px, p.py, r, baseAngle+mouth, baseAngle+2*Math.PI-mouth);
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, r, baseAngle + mouth, baseAngle + 2*Math.PI - mouth);
   ctx.closePath();
   ctx.clip();
-  ctx.fillStyle = '#9B1414';
-  ctx.fillRect(p.px-r, p.py-r/3, r*2, r*2/3);
+
+  // Fons groc (senyera)
+  ctx.fillStyle = '#FCDD09';
+  ctx.fillRect(cx - r, cy - r, r*2, r*2);
+
+  // 3 franges vermelles horitzontals
+  ctx.fillStyle = '#DA121A';
+  const stripeH = (r*2) / 7;
+  ctx.fillRect(cx - r, cy - r + stripeH*1, r*2, stripeH);
+  ctx.fillRect(cx - r, cy - r + stripeH*3, r*2, stripeH);
+  ctx.fillRect(cx - r, cy - r + stripeH*5, r*2, stripeH);
+
+  // Triangle blau (a l'esquerra del cercle)
+  ctx.fillStyle = '#0032A0';
+  ctx.beginPath();
+  // El triangle ocupa el terç esquerre del bounding box
+  const tx = cx - r;
+  ctx.moveTo(tx, cy - r);
+  ctx.lineTo(tx + r*0.85, cy);
+  ctx.lineTo(tx, cy + r);
+  ctx.closePath();
+  ctx.fill();
+
+  // Estrella blanca dins el triangle
+  ctx.fillStyle = '#FFFFFF';
+  const starX = tx + r*0.28;
+  const starY = cy;
+  drawStar(ctx, starX, starY, r*0.22, r*0.10, 5);
+
   ctx.restore();
-  const eyeX = p.px + Math.cos(baseAngle - Math.PI/4)*r*0.5;
-  const eyeY = p.py + Math.sin(baseAngle - Math.PI/4)*r*0.5;
-  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(eyeX, eyeY, 3, 0, Math.PI*2); ctx.fill();
+
+  // Ull (fora del clip per ser sempre visible)
+  const eyeOffX = Math.cos(baseAngle - Math.PI/4) * r * 0.5;
+  const eyeOffY = Math.sin(baseAngle - Math.PI/4) * r * 0.5;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(cx + eyeOffX, cy + eyeOffY, 3, 0, Math.PI*2);
+  ctx.fill();
 }
 
 function drawGhost(g) {
