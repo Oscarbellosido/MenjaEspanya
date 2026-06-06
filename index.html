@@ -109,28 +109,74 @@ function wrapX(px) {
 
 function movePlayer() {
   const p = player;
-  const {x:nx, y:ny} = p.next;
-  if ((nx !== 0 || ny !== 0) && canMove(p.px, p.py, nx, ny)) {
-    p.dir = {x:nx, y:ny};
+  const SNAP = SPEED + 1; // llindar d'alineació (pixels)
+
+  // Centre de la cel·la actual
+  const cellCX = Math.floor(p.px / CELL) * CELL + CELL / 2;
+  const cellCY = Math.floor(p.py / CELL) * CELL + CELL / 2;
+  const nearCenterX = Math.abs(p.px - cellCX) <= SNAP;
+  const nearCenterY = Math.abs(p.py - cellCY) <= SNAP;
+  const nearCenter = nearCenterX && nearCenterY;
+
+  // Intenta aplicar la direcció demanada quan estem prop del centre
+  if (nearCenter && (p.next.x !== 0 || p.next.y !== 0)) {
+    // Alinea primer per evitar offset
+    const snapPx = cellCX;
+    const snapPy = cellCY;
+    if (canMove(snapPx, snapPy, p.next.x, p.next.y)) {
+      p.dir = { x: p.next.x, y: p.next.y };
+      p.px = snapPx;
+      p.py = snapPy;
+    }
   }
-  if ((p.dir.x !== 0 || p.dir.y !== 0) && canMove(p.px, p.py, p.dir.x, p.dir.y)) {
-    p.px += p.dir.x * SPEED;
-    p.py += p.dir.y * SPEED;
-    p.px = wrapX(p.px);
+
+  // Continua en la direcció actual si pot
+  if (p.dir.x !== 0 || p.dir.y !== 0) {
+    if (nearCenter && !canMove(cellCX, cellCY, p.dir.x, p.dir.y)) {
+      // Para al centre si hi ha paret al davant
+      p.px = cellCX;
+      p.py = cellCY;
+      p.dir = { x: 0, y: 0 };
+    } else if (canMove(p.px, p.py, p.dir.x, p.dir.y)) {
+      p.px += p.dir.x * SPEED;
+      p.py += p.dir.y * SPEED;
+      p.px = wrapX(p.px);
+    }
   }
+
+  // Actualitza cel·la lògica
   p.x = Math.round(p.px / CELL);
   p.y = Math.round(p.py / CELL);
+
+  // Menja punts i power pellets
   const col = Math.floor(p.px / CELL);
   const row = Math.floor(p.py / CELL);
-  if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
-    if (maze[row][col] === 0) { maze[row][col] = 3; score += 10; document.getElementById('score').textContent = score; }
+  if (nearCenter && row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+    if (maze[row][col] === 0) {
+      maze[row][col] = 3;
+      score += 10;
+      document.getElementById('score').textContent = score;
+    }
     if (maze[row][col] === 2) {
-      maze[row][col] = 3; score += 50; document.getElementById('score').textContent = score;
-      p.powered = true; p.powerTimer = 300;
+      maze[row][col] = 3;
+      score += 50;
+      document.getElementById('score').textContent = score;
+      p.powered = true;
+      p.powerTimer = 300;
       ghosts.forEach(g => { g.scared = true; g.eaten = false; });
     }
   }
-  if (p.powered) { p.powerTimer--; if (p.powerTimer <= 0) { p.powered = false; ghosts.forEach(g => g.scared = false); } }
+
+  // Compta enrere del poder
+  if (p.powered) {
+    p.powerTimer--;
+    if (p.powerTimer <= 0) {
+      p.powered = false;
+      ghosts.forEach(g => g.scared = false);
+    }
+  }
+
+  // Animació boca
   p.mouthAngle += 0.15 * p.mouthDir;
   if (p.mouthAngle > 0.35 || p.mouthAngle < 0) p.mouthDir *= -1;
 }
