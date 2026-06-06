@@ -109,55 +109,47 @@ function wrapX(px) {
 
 function movePlayer() {
   const p = player;
-  const SNAP = SPEED + 1; // llindar d'alineació (pixels)
 
-  // Centre de la cel·la actual
-  const cellCX = Math.floor(p.px / CELL) * CELL + CELL / 2;
-  const cellCY = Math.floor(p.py / CELL) * CELL + CELL / 2;
-  const nearCenterX = Math.abs(p.px - cellCX) <= SNAP;
-  const nearCenterY = Math.abs(p.py - cellCY) <= SNAP;
-  const nearCenter = nearCenterX && nearCenterY;
-
-  // Intenta aplicar la direcció demanada quan estem prop del centre
-  if (nearCenter && (p.next.x !== 0 || p.next.y !== 0)) {
-    // Alinea primer per evitar offset
-    const snapPx = cellCX;
-    const snapPy = cellCY;
-    if (canMove(snapPx, snapPy, p.next.x, p.next.y)) {
-      p.dir = { x: p.next.x, y: p.next.y };
-      p.px = snapPx;
-      p.py = snapPy;
-    }
-  }
-
-  // Continua en la direcció actual si pot
-  if (p.dir.x !== 0 || p.dir.y !== 0) {
-    if (nearCenter && !canMove(cellCX, cellCY, p.dir.x, p.dir.y)) {
-      // Para al centre si hi ha paret al davant
-      p.px = cellCX;
-      p.py = cellCY;
-      p.dir = { x: 0, y: 0 };
-    } else if (canMove(p.px, p.py, p.dir.x, p.dir.y)) {
-      p.px += p.dir.x * SPEED;
-      p.py += p.dir.y * SPEED;
-      p.px = wrapX(p.px);
-    }
-  }
-
-  // Actualitza cel·la lògica
-  p.x = Math.round(p.px / CELL);
-  p.y = Math.round(p.py / CELL);
-
-  // Menja punts i power pellets
+  // Cel·la on és el jugador i el seu centre en píxels
   const col = Math.floor(p.px / CELL);
   const row = Math.floor(p.py / CELL);
-  if (nearCenter && row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+  const centerX = col * CELL + CELL / 2;
+  const centerY = row * CELL + CELL / 2;
+  const dX = Math.abs(p.px - centerX);
+  const dY = Math.abs(p.py - centerY);
+  const aligned = dX <= SPEED && dY <= SPEED;
+
+  if (aligned) {
+    // Intenta canviar a la nova direcció sol·licitada
+    if (p.next.x !== 0 || p.next.y !== 0) {
+      const nc = col + p.next.x;
+      const nr = row + p.next.y;
+      const free = nc >= 0 && nc < COLS && nr >= 0 && nr < ROWS && maze[nr][nc] !== 1;
+      if (free) {
+        p.dir = { x: p.next.x, y: p.next.y };
+        p.px = centerX;
+        p.py = centerY;
+      }
+    }
+
+    // Para si hi ha paret davant (alinea al centre)
+    if (p.dir.x !== 0 || p.dir.y !== 0) {
+      const fc = col + p.dir.x;
+      const fr = row + p.dir.y;
+      const blocked = fc < 0 || fc >= COLS || fr < 0 || fr >= ROWS || maze[fr][fc] === 1;
+      if (blocked) {
+        p.px = centerX;
+        p.py = centerY;
+        p.dir = { x: 0, y: 0 };
+      }
+    }
+
+    // Menja banderes i power-pellets
     if (maze[row][col] === 0) {
       maze[row][col] = 3;
       score += 10;
       document.getElementById('score').textContent = score;
-    }
-    if (maze[row][col] === 2) {
+    } else if (maze[row][col] === 2) {
       maze[row][col] = 3;
       score += 50;
       document.getElementById('score').textContent = score;
@@ -167,7 +159,16 @@ function movePlayer() {
     }
   }
 
-  // Compta enrere del poder
+  // Mou en la direcció actual
+  if (p.dir.x !== 0 || p.dir.y !== 0) {
+    p.px += p.dir.x * SPEED;
+    p.py += p.dir.y * SPEED;
+    // Wrap pels túnels laterals
+    if (p.px < -CELL / 2) p.px = COLS * CELL + CELL / 2;
+    if (p.px > COLS * CELL + CELL / 2) p.px = -CELL / 2;
+  }
+
+  // Compte enrere del poder
   if (p.powered) {
     p.powerTimer--;
     if (p.powerTimer <= 0) {
