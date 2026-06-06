@@ -74,7 +74,7 @@ let maze, player, ghosts, score, lives, level, gameState, animFrame;
 
 function initLevel() {
   maze = MAZE_TEMPLATE.map(r => [...r]);
-  player = { x:10, y:16, dir:{x:0,y:0}, next:{x:0,y:0}, px:10*CELL+CELL/2, py:16*CELL+CELL/2, mouthAngle:0, mouthDir:1, powered:false, powerTimer:0 };
+  player = { col:10, row:16, offX:CELL/2, offY:CELL/2, x:10, y:16, dir:{x:0,y:0}, next:{x:0,y:0}, px:10*CELL+CELL/2, py:16*CELL+CELL/2, mouthAngle:0, mouthDir:1, powered:false, powerTimer:0 };
   ghosts = [
     { x:9,y:9, px:9*CELL+CELL/2, py:9*CELL+CELL/2, dir:{x:1,y:0}, color:'#FF0000', scared:false, eaten:false },
     { x:10,y:9, px:10*CELL+CELL/2, py:9*CELL+CELL/2, dir:{x:-1,y:0}, color:'#FF6600', scared:false, eaten:false },
@@ -110,76 +110,61 @@ function wrapX(px) {
 function movePlayer() {
   const p = player;
 
-  // Cel·la on és el jugador i el seu centre en píxels
-  const col = Math.floor(p.px / CELL);
-  const row = Math.floor(p.py / CELL);
-  const centerX = col * CELL + CELL / 2;
-  const centerY = row * CELL + CELL / 2;
-  const dX = Math.abs(p.px - centerX);
-  const dY = Math.abs(p.py - centerY);
-  const aligned = dX <= SPEED && dY <= SPEED;
+  // Assegura que col/row existeixin (compatibilitat)
+  if (p.col === undefined) { p.col = Math.floor(p.px / CELL); p.row = Math.floor(p.py / CELL); }
+  if (p.offX === undefined) { p.offX = CELL/2; p.offY = CELL/2; }
 
-  if (aligned) {
-    // Intenta canviar a la nova direcció sol·licitada
+  // Al centre exacte → gira o para
+  if (p.offX === CELL/2 && p.offY === CELL/2) {
+    // Prova nova direcció
     if (p.next.x !== 0 || p.next.y !== 0) {
-      const nc = col + p.next.x;
-      const nr = row + p.next.y;
-      const free = nc >= 0 && nc < COLS && nr >= 0 && nr < ROWS && maze[nr][nc] !== 1;
-      if (free) {
+      const nc = p.col + p.next.x;
+      const nr = p.row + p.next.y;
+      if (nc >= 0 && nc < COLS && nr >= 0 && nr < ROWS && maze[nr][nc] !== 1) {
         p.dir = { x: p.next.x, y: p.next.y };
-        p.px = centerX;
-        p.py = centerY;
       }
     }
-
-    // Para si hi ha paret davant (alinea al centre)
+    // Para si paret davant
     if (p.dir.x !== 0 || p.dir.y !== 0) {
-      const fc = col + p.dir.x;
-      const fr = row + p.dir.y;
-      const blocked = fc < 0 || fc >= COLS || fr < 0 || fr >= ROWS || maze[fr][fc] === 1;
-      if (blocked) {
-        p.px = centerX;
-        p.py = centerY;
+      const fc = p.col + p.dir.x;
+      const fr = p.row + p.dir.y;
+      if (fc < 0 || fc >= COLS || fr < 0 || fr >= ROWS || maze[fr][fc] === 1) {
         p.dir = { x: 0, y: 0 };
       }
     }
-
-    // Menja banderes i power-pellets
-    if (maze[row][col] === 0) {
-      maze[row][col] = 3;
-      score += 10;
+    // Menja
+    if (maze[p.row][p.col] === 0) {
+      maze[p.row][p.col] = 3; score += 10;
       document.getElementById('score').textContent = score;
-    } else if (maze[row][col] === 2) {
-      maze[row][col] = 3;
-      score += 50;
+    } else if (maze[p.row][p.col] === 2) {
+      maze[p.row][p.col] = 3; score += 50;
       document.getElementById('score').textContent = score;
-      p.powered = true;
-      p.powerTimer = 300;
+      p.powered = true; p.powerTimer = 300;
       ghosts.forEach(g => { g.scared = true; g.eaten = false; });
     }
   }
 
-  // Mou en la direcció actual
+  // Mou
   if (p.dir.x !== 0 || p.dir.y !== 0) {
-    p.px += p.dir.x * SPEED;
-    p.py += p.dir.y * SPEED;
-    // Wrap pels túnels laterals
-    if (p.px < -CELL / 2) p.px = COLS * CELL + CELL / 2;
-    if (p.px > COLS * CELL + CELL / 2) p.px = -CELL / 2;
+    p.offX += p.dir.x * SPEED;
+    p.offY += p.dir.y * SPEED;
+    if (p.offX >= CELL) { p.col++; p.offX -= CELL; }
+    if (p.offX < 0)    { p.col--; p.offX += CELL; }
+    if (p.offY >= CELL) { p.row++; p.offY -= CELL; }
+    if (p.offY < 0)    { p.row--; p.offY += CELL; }
+    if (p.col < 0) p.col = COLS - 1;
+    if (p.col >= COLS) p.col = 0;
   }
 
-  // Compte enrere del poder
-  if (p.powered) {
-    p.powerTimer--;
-    if (p.powerTimer <= 0) {
-      p.powered = false;
-      ghosts.forEach(g => g.scared = false);
-    }
-  }
+  // Actualitza px/py per al dibuix i col·lisions
+  p.px = p.col * CELL + p.offX;
+  p.py = p.row * CELL + p.offY;
+  p.x = p.col; p.y = p.row;
 
-  // Animació boca
+  // Animació boca i poder
   p.mouthAngle += 0.15 * p.mouthDir;
   if (p.mouthAngle > 0.35 || p.mouthAngle < 0) p.mouthDir *= -1;
+  if (p.powered) { p.powerTimer--; if (p.powerTimer <= 0) { p.powered = false; ghosts.forEach(g => g.scared = false); } }
 }
 
 function ghostAI(g) {
@@ -352,6 +337,7 @@ function gameLoop() {
         showOverlay('GAME OVER', 'Puntuació final: ' + score, 'TORNAR A JUGAR');
       } else {
         gameState = 'playing';
+        player.col = 10; player.row = 16; player.offX = CELL/2; player.offY = CELL/2;
         player.px = 10*CELL+CELL/2; player.py = 16*CELL+CELL/2;
         player.dir = {x:0,y:0}; player.next = {x:0,y:0};
       }
