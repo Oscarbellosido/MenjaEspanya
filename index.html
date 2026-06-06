@@ -357,12 +357,31 @@ function gameLoop() {
       document.getElementById('lives').textContent = lives;
       if (lives <= 0) {
         gameState = 'gameover';
-        showOverlay('GAME OVER', 'Puntuació final: ' + score, 'TORNAR A JUGAR');
+        showOverlay('💀 GAME OVER', `Puntuació final: ${score}`, 'TORNAR A JUGAR');
       } else {
         gameState = 'playing';
-        player.col = 10; player.row = 16; player.offX = CELL/2; player.offY = CELL/2;
-        player.px = 10*CELL+CELL/2; player.py = 16*CELL+CELL/2;
+        // Reset jugador
+        player.col = 10; player.row = 16;
+        player.offX = CELL/2; player.offY = CELL/2;
+        player.px = player.col*CELL+player.offX;
+        player.py = player.row*CELL+player.offY;
         player.dir = {x:0,y:0}; player.next = {x:0,y:0};
+        player.powered = false; player.powerTimer = 0;
+        // Reset fantasmes a posicions originals
+        const ghostStarts = [
+          {col:9, row:9, dir:{x:1,y:0}},
+          {col:10, row:9, dir:{x:-1,y:0}},
+          {col:11, row:9, dir:{x:0,y:1}},
+          {col:9, row:10, dir:{x:0,y:-1}},
+        ];
+        ghosts.forEach((g, i) => {
+          const s = ghostStarts[i];
+          g.col = s.col; g.row = s.row;
+          g.offX = CELL/2; g.offY = CELL/2;
+          g.px = g.col*CELL+g.offX; g.py = g.row*CELL+g.offY;
+          g.dir = {...s.dir};
+          g.scared = false; g.eaten = false;
+        });
       }
     }
     checkWin();
