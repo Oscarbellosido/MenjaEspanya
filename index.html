@@ -76,11 +76,12 @@ function initLevel() {
   maze = MAZE_TEMPLATE.map(r => [...r]);
   player = { col:10, row:16, offX:CELL/2, offY:CELL/2, x:10, y:16, dir:{x:0,y:0}, next:{x:0,y:0}, px:10*CELL+CELL/2, py:16*CELL+CELL/2, mouthAngle:0, mouthDir:1, powered:false, powerTimer:0 };
   ghosts = [
-    { x:9,y:9, px:9*CELL+CELL/2, py:9*CELL+CELL/2, dir:{x:1,y:0}, color:'#FF0000', scared:false, eaten:false },
-    { x:10,y:9, px:10*CELL+CELL/2, py:9*CELL+CELL/2, dir:{x:-1,y:0}, color:'#FF6600', scared:false, eaten:false },
-    { x:11,y:9, px:11*CELL+CELL/2, py:11*CELL+CELL/2, dir:{x:0,y:1}, color:'#FF3366', scared:false, eaten:false },
-    { x:9,y:10, px:9*CELL+CELL/2, py:10*CELL+CELL/2, dir:{x:0,y:-1}, color:'#CC0000', scared:false, eaten:false },
+    { col:9, row:9, offX:CELL/2, offY:CELL/2, px:0, py:0, dir:{x:1,y:0}, color:'#FF0000', scared:false, eaten:false },
+    { col:10, row:9, offX:CELL/2, offY:CELL/2, px:0, py:0, dir:{x:-1,y:0}, color:'#FF6600', scared:false, eaten:false },
+    { col:11, row:9, offX:CELL/2, offY:CELL/2, px:0, py:0, dir:{x:0,y:1}, color:'#FF3366', scared:false, eaten:false },
+    { col:9, row:10, offX:CELL/2, offY:CELL/2, px:0, py:0, dir:{x:0,y:-1}, color:'#CC0000', scared:false, eaten:false },
   ];
+  ghosts.forEach(g => { g.px = g.col*CELL+g.offX; g.py = g.row*CELL+g.offY; });
 }
 
 const SPEED = 2;
@@ -168,41 +169,63 @@ function movePlayer() {
 }
 
 function ghostAI(g) {
-  const spd = g.scared ? SPEED * 0.5 : SPEED * (1 + (level-1)*0.1);
-  const cx = Math.floor(g.px / CELL);
-  const cy = Math.floor(g.py / CELL);
-  const onGrid = Math.abs(g.px - cx*CELL - CELL/2) < spd+1 && Math.abs(g.py - cy*CELL - CELL/2) < spd+1;
-  if (onGrid) {
+  if (g.eaten) return;
+
+  // Inicialitza col/row/offX/offY si no existeixen
+  if (g.col === undefined) {
+    g.col = Math.floor(g.px / CELL);
+    g.row = Math.floor(g.py / CELL);
+    g.offX = CELL/2; g.offY = CELL/2;
+  }
+
+  // Al centre exacte de la cel·la → decideix nova direcció
+  if (g.offX === CELL/2 && g.offY === CELL/2) {
     const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+    // Filtra: no anar enrere, no anar a paret
     const valid = dirs.filter(d => {
-      if (d.x === -g.dir.x && d.y === -g.dir.y) return false;
-      const nc = cx + d.x, nr = cy + d.y;
-      if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) return true;
+      if (d.x === -g.dir.x && d.y === -g.dir.y) return false; // no enrere
+      const nc = g.col + d.x;
+      const nr = g.row + d.y;
+      if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) return false;
       return maze[nr][nc] !== 1;
     });
     if (valid.length > 0) {
       let chosen;
-      if (Math.random() < 0.6 && !g.scared) {
+      if (g.scared) {
+        // Fuig del jugador
         chosen = valid.reduce((best, d) => {
-          const nc = cx+d.x, nr = cy+d.y;
-          const dist = (nc-player.x)**2 + (nr-player.y)**2;
-          return dist < best.dist ? {d, dist} : best;
-        }, {d:valid[0], dist:Infinity}).d;
-      } else if (g.scared) {
-        chosen = valid.reduce((best, d) => {
-          const nc = cx+d.x, nr = cy+d.y;
-          const dist = (nc-player.x)**2 + (nr-player.y)**2;
+          const nc = g.col+d.x, nr = g.row+d.y;
+          const dist = (nc-player.col)**2 + (nr-player.row)**2;
           return dist > best.dist ? {d, dist} : best;
-        }, {d:valid[0], dist:-1}).d;
+        }, {d: valid[0], dist: -1}).d;
+      } else if (Math.random() < 0.65) {
+        // Persegueix el jugador
+        chosen = valid.reduce((best, d) => {
+          const nc = g.col+d.x, nr = g.row+d.y;
+          const dist = (nc-player.col)**2 + (nr-player.row)**2;
+          return dist < best.dist ? {d, dist} : best;
+        }, {d: valid[0], dist: Infinity}).d;
       } else {
         chosen = valid[Math.floor(Math.random()*valid.length)];
       }
       g.dir = chosen;
     }
   }
-  g.px += g.dir.x * spd;
-  g.py += g.dir.y * spd;
-  g.px = wrapX(g.px);
+
+  // Mou el fantasma (mateix sistema que el jugador)
+  const spd = g.scared ? 1 : SPEED;
+  g.offX += g.dir.x * spd;
+  g.offY += g.dir.y * spd;
+  if (g.offX >= CELL) { g.col++; g.offX -= CELL; }
+  if (g.offX < 0)    { g.col--; g.offX += CELL; }
+  if (g.offY >= CELL) { g.row++; g.offY -= CELL; }
+  if (g.offY < 0)    { g.row--; g.offY += CELL; }
+  if (g.col < 0) g.col = COLS-1;
+  if (g.col >= COLS) g.col = 0;
+
+  // Actualitza px/py per al dibuix i col·lisions
+  g.px = g.col * CELL + g.offX;
+  g.py = g.row * CELL + g.offY;
 }
 
 function checkCollisions() {
@@ -212,7 +235,7 @@ function checkCollisions() {
       if (player.powered && !g.eaten) {
         g.eaten = true; g.scared = false; score += 200;
         document.getElementById('score').textContent = score;
-        setTimeout(() => { g.px = 10*CELL+CELL/2; g.py = 9*CELL+CELL/2; g.eaten = false; }, 3000);
+        setTimeout(() => { g.col = 10; g.row = 9; g.offX = CELL/2; g.offY = CELL/2; g.px = g.col*CELL+g.offX; g.py = g.row*CELL+g.offY; g.eaten = false; }, 3000);
       } else if (!g.eaten) {
         gameState = 'dead';
       }
